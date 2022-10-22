@@ -9,6 +9,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_fft/flutter_fft.dart';
+import 'package:flutter_fgbg/flutter_fgbg.dart';
 
 void main() => runApp(MyApp());
 
@@ -33,10 +34,10 @@ class ApplicationState extends State<Application> {
   int? octave;
   bool? isRecording;
 
-  FlutterFft flutterFft = new FlutterFft();
+  FlutterFft flutterFft = FlutterFft();
 
   final double minMicDb = 45.0;
-  final double maxMicDb = 95+.0;
+  final double maxMicDb = 95.0;
 
   final int maxVibe = 255;
   int destVibe = 0;
@@ -72,6 +73,8 @@ class ApplicationState extends State<Application> {
 
   double auxDb = 0.0;
   double auxDbScale = 0.0;
+
+  late StreamSubscription<FGBGType> subscription;
 
   _updateHeightAndWidthBasedOnVolume() async {
     newHeight = _newValueInMappedRange(currDb, minMicDb, maxMicDb, heightMin, heightMax);
@@ -145,12 +148,17 @@ class ApplicationState extends State<Application> {
   bool _isRecording = false;
   StreamSubscription<NoiseReading>? _noiseSubscription;
   late NoiseMeter _noiseMeter;
+  bool _appInFocus = true;
 
   @override
   void initState() {
     _noiseMeter = new NoiseMeter(onError);
     isRecording = flutterFft.getIsRecording;
     frequency = flutterFft.getFrequency;
+    subscription = FGBGEvents.stream.listen((event) {
+      print(event); // FGBGType.foreground or FGBGType.background
+      _appInFocus = event == FGBGType.foreground;
+    });
     super.initState();
     _initialize();
   }
@@ -158,6 +166,7 @@ class ApplicationState extends State<Application> {
   @override
   void dispose() {
     _noiseSubscription?.cancel();
+    subscription.cancel();
     super.dispose();
   }
 
@@ -186,7 +195,9 @@ class ApplicationState extends State<Application> {
           _updateHeightAndWidthBasedOnVolume();
           destVibe = (maxVibe * auxDbScale).floor();
 
-          Vibration.vibrate(pattern: [0, 200, 0, 200, 0, 200], intensities: [0, (destVibe / 4).floor(), 0, (destVibe / 2).floor(), 0, destVibe]);
+          if (_appInFocus) {
+            Vibration.vibrate(pattern: [0, 200, 0, 200, 0, 200], intensities: [0, (destVibe / 4).floor(), 0, (destVibe / 2).floor(), 0, destVibe]);
+          }
       });
     } catch (err) {
       print(err);
