@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:vibration/vibration.dart';
 import 'package:flutter_fft/flutter_fft.dart';
@@ -35,7 +36,7 @@ class ApplicationState extends State<Application> {
   FlutterFft flutterFft = new FlutterFft();
 
   final double minMicDb = 45.0;
-  final double maxMicDb = 75.0;
+  final double maxMicDb = 95+.0;
 
   final int maxVibe = 255;
   int destVibe = 0;
@@ -69,22 +70,8 @@ class ApplicationState extends State<Application> {
   double maxDb = 0.0;
   double currDb = 0.0;
 
-  // double meanDb = 0.0;
-
   double auxDb = 0.0;
   double auxDbScale = 0.0;
-
-
-  // final int redFreq = 750;
-  // final int yellowFreq = 1400;
-  // final int greenFreq = 2050;
-  // final int cyanFreq = 2700;
-  // final int blueFreq = 3350;
-  // final int magentaFreq = 4000;
-  // int r = 255;
-  // int g = 255;
-  // int b = 255;
-  // double hue = 0.0;
 
   _updateHeightAndWidthBasedOnVolume() async {
     newHeight = _newValueInMappedRange(currDb, minMicDb, maxMicDb, heightMin, heightMax);
@@ -126,8 +113,6 @@ class ApplicationState extends State<Application> {
           setState(
                 () => {
               frequency = data[1] as double,
-              note = data[2] as String,
-              octave = data[5] as int,
             },
           ),
           // print(frequency.toString()),
@@ -166,8 +151,6 @@ class ApplicationState extends State<Application> {
     _noiseMeter = new NoiseMeter(onError);
     isRecording = flutterFft.getIsRecording;
     frequency = flutterFft.getFrequency;
-    note = flutterFft.getNote;
-    octave = flutterFft.getOctave;
     super.initState();
     _initialize();
   }
@@ -185,9 +168,6 @@ class ApplicationState extends State<Application> {
       }
     });
 
-    // maxDb = max(maxDb, noiseReading.maxDecibel);
-    // minDb = min(minDb, noiseReading.meanDecibel);
-    // meanDb = noiseReading.meanDecibel;
     currDb = noiseReading.meanDecibel;
   }
 
@@ -203,7 +183,6 @@ class ApplicationState extends State<Application> {
       Timer.periodic(const Duration(seconds: 1), (timer) async {
           auxDb = currDb - minMicDb;
           auxDbScale = auxDb / (maxMicDb - minMicDb);
-          // print(meanDb.toString() + "," + (meanDb - minMicDb).toString() + ", " + auxDbScale.toString() + ", " + (maxVibe * auxDbScale).floor().toString());
           _updateHeightAndWidthBasedOnVolume();
           destVibe = (maxVibe * auxDbScale).floor();
 
@@ -232,33 +211,81 @@ class ApplicationState extends State<Application> {
     _initialize();
   }
 
+  void buildSettings(BuildContext context) {
+    Widget closeButton = TextButton(
+      child: Text("Close", style: TextStyle(fontSize: 16)),
+      onPressed: () {
+        closePopup(context);
+      },
+    );
+
+    AlertDialog settingsAlert = AlertDialog(
+      title: const Text("Settings"),
+      content: Container(
+            height: MediaQuery.of(context).size.height * (1/3),
+            width: MediaQuery.of(context).size.width * (2/3),
+            child: Center(
+              child: Column(
+                children: [
+                  Text("your settings here!", style: TextStyle(fontSize: 15))
+                ],
+              )
+        )
+      ),
+      actions: [
+        closeButton
+      ],
+    );
+
+    showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          return settingsAlert;
+        }
+    );
+  }
+
+  Future<void> closePopup(BuildContext context) async {
+    Navigator.of(context).pop();
+  }
+
   @override
   Widget build(BuildContext context) {
-    widthMax = MediaQuery.of(context).size.width;
-    heightMax = MediaQuery.of(context).size.height;
-    widthMin = heightMin * widthMax / heightMax;
-    // newWidth = widthMin;
+
+    widthMax = MediaQuery
+        .of(context)
+        .size
+        .width;
+    heightMax = MediaQuery
+        .of(context)
+        .size
+        .height;
+    
     return MaterialApp(
         title: "Simple flutter fft example",
         theme: ThemeData.dark(),
         color: Colors.blue,
         home: Scaffold(
           backgroundColor: Colors.black,
-          body: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  width: newWidth,
-                  height: newHeight,
-                  decoration: new BoxDecoration(
-                    color: hsvColor.toColor(),
-                    shape: BoxShape.rectangle,
+          body: GestureDetector(
+            onDoubleTap: () => buildSettings(context),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: newWidth,
+                    height: newHeight,
+                    decoration: BoxDecoration(
+                      color: hsvColor.toColor(),
+                      shape: BoxShape.rectangle,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ));
+        )
+    );
   }
-}
+  }
