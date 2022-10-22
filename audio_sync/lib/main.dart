@@ -29,52 +29,76 @@ class Application extends StatefulWidget {
 }
 
 class ApplicationState extends State<Application> {
+  // Frequency readings
+  FlutterFft flutterFft = FlutterFft();
   double? frequency;
-  String? note;
-  int? octave;
   bool? isRecording;
 
-  FlutterFft flutterFft = FlutterFft();
+  // Volume readings
+  bool _isRecording = false;
+  late NoiseMeter _noiseMeter;
+  StreamSubscription<NoiseReading>? _noiseSubscription;
 
+  // App foreground/background readings
+  late StreamSubscription<FGBGType> subscription;
+
+  // Vibrations toggle value
+  bool _vibrationsActive = true;
+
+  // Min/max accepted decibel reading
   final double minMicDb = 45.0;
   final double maxMicDb = 95.0;
 
-  final int maxVibe = 255;
-  int destVibe = 0;
-  int currVibe = 0;
+  // Current volume reading
+  double currDb = 0.0;
 
+  // Read volume shifted towards 0 using the minimum accepted decibel reading
+  double acceptedDb = 0.0;
+
+  // Read volume shifted on a 0.0-1.0 scale using the min/max accepted decibel readings
+  double acceptedDbScale = 0.0;
+
+  // Max accepted vibration intensity
+  final int maxVibe = 255;
+
+  // Target vibration intensity
+  int destVibe = 0;
+
+  // Min/max accepted mic frequency
+  double minFreq = 155.0;
+  double maxFreq = 4978.0;
+  double freqScale = 1.0;
+
+  // The frequency at which high/low color tones are set
+  double splitFreq = 0.0;
+
+  // Shape's width resizing
   final double widthMin = 5.0;
   double widthMax = 300.0;
   double newWidth = 5.0;
 
+  // Shape's height resizing
   final double heightMin = 10.0;
   double heightMax = 300.0;
   double newHeight = 5.0;
 
+  // Shape's HSV value
   double minValue = 0.2;
   double maxValue = 1.0;
   double newValue = 0.0;
 
+  // Shape's HSV target
   HSVColor hsvColor = HSVColor.fromAHSV(1.0, 217.0, 1.0, 1.0);
+
+  // Shape's HSV hue
   final double violetHue = 255.0;
   final double minRedHue = 0.0;
   final double magentaHue = 255.1;
   final double maxRedHue = 360.0;
   double newHue = 0.0;
 
-  double minFreq = 155.0;
-  double maxFreq = 4978.0;
-  double freqScale = 1.0;
-  double splitFreq = 0.0;
-
-  double minDb = 1000.0;
-  double maxDb = 0.0;
-  double currDb = 0.0;
-
-  double auxDb = 0.0;
-  double auxDbScale = 0.0;
-
-  late StreamSubscription<FGBGType> subscription;
+  bool _appInFocus = true;
+  late SwitchWidget vibrationsSwitch;
 
   _updateHeightAndWidthBasedOnVolume() async {
     newHeight = _newValueInMappedRange(currDb, minMicDb, maxMicDb, heightMin, heightMax);
@@ -92,13 +116,6 @@ class ApplicationState extends State<Application> {
 
   _initialize() async {
     start();
-    maxDb = 0.0;
-    minDb = 1000.0;
-
-    print("Starting recorder...");
-    // print("Before");
-    // bool hasPermission = await flutterFft.checkPermission();
-    // print("After: " + hasPermission.toString());
 
     // Keep asking for mic permission until accepted
     while (!(await flutterFft.checkPermission())) {
@@ -106,9 +123,7 @@ class ApplicationState extends State<Application> {
       // IF DENY QUIT PROGRAM
     }
 
-    // await flutterFft.checkPermissions();
     await flutterFft.startRecorder();
-    print("Recorder started...");
     setState(() => isRecording = flutterFft.getIsRecording);
 
     flutterFft.onRecorderStateChanged.listen(
@@ -142,13 +157,8 @@ class ApplicationState extends State<Application> {
         onError: (err) {
           print("Error: $err");
         },
-        onDone: () => {print("Isdone")});
+        onDone: () => {print("Done")});
   }
-
-  bool _isRecording = false;
-  StreamSubscription<NoiseReading>? _noiseSubscription;
-  late NoiseMeter _noiseMeter;
-  bool _appInFocus = true;
 
   @override
   void initState() {
@@ -156,9 +166,10 @@ class ApplicationState extends State<Application> {
     isRecording = flutterFft.getIsRecording;
     frequency = flutterFft.getFrequency;
     subscription = FGBGEvents.stream.listen((event) {
-      print(event); // FGBGType.foreground or FGBGType.background
       _appInFocus = event == FGBGType.foreground;
     });
+
+    vibrationsSwitch = SwitchWidget();
     super.initState();
     _initialize();
   }
@@ -171,9 +182,9 @@ class ApplicationState extends State<Application> {
   }
 
   void onData(NoiseReading noiseReading) {
-    this.setState(() {
-      if (!this._isRecording) {
-        this._isRecording = true;
+    setState(() {
+      if (!_isRecording) {
+        _isRecording = true;
       }
     });
 
@@ -190,12 +201,12 @@ class ApplicationState extends State<Application> {
       _noiseSubscription = _noiseMeter.noiseStream.listen(onData);
 
       Timer.periodic(const Duration(seconds: 1), (timer) async {
-          auxDb = currDb - minMicDb;
-          auxDbScale = auxDb / (maxMicDb - minMicDb);
+          acceptedDb = currDb - minMicDb;
+          acceptedDbScale = acceptedDb / (maxMicDb - minMicDb);
           _updateHeightAndWidthBasedOnVolume();
-          destVibe = (maxVibe * auxDbScale).floor();
+          destVibe = (maxVibe * acceptedDbScale).floor();
 
-          if (_appInFocus) {
+          if (_appInFocus && _vibrationsActive) {
             Vibration.vibrate(pattern: [0, 200, 0, 200, 0, 200], intensities: [0, (destVibe / 4).floor(), 0, (destVibe / 2).floor(), 0, destVibe]);
           }
       });
@@ -210,21 +221,17 @@ class ApplicationState extends State<Application> {
         _noiseSubscription!.cancel();
         _noiseSubscription = null;
       }
-      this.setState(() {
-        this._isRecording = false;
+      setState(() {
+        _isRecording = false;
       });
     } catch (err) {
-      print('stopRecorder error: $err');
+      print('stop recorder error: $err');
     }
-  }
-
-  void _reset() {
-    _initialize();
   }
 
   void buildSettings(BuildContext context) {
     Widget closeButton = TextButton(
-      child: Text("Close", style: TextStyle(fontSize: 16)),
+      child: const Text("Close", style: TextStyle(fontSize: 16)),
       onPressed: () {
         closePopup(context);
       },
@@ -232,15 +239,21 @@ class ApplicationState extends State<Application> {
 
     AlertDialog settingsAlert = AlertDialog(
       title: const Text("Settings"),
-      content: Container(
-            height: MediaQuery.of(context).size.height * (1/3),
-            width: MediaQuery.of(context).size.width * (2/3),
-            child: Center(
-              child: Column(
+      content: SizedBox(
+        height: MediaQuery.of(context).size.height * (1/3),
+        width: MediaQuery.of(context).size.width * (2/3),
+        child: Center(
+          child: Column(
+            children: [
+              Row(
                 children: [
-                  Text("your settings here!", style: TextStyle(fontSize: 15))
+                  const Text("Toggle Vibrations"),
+                  const Spacer(),
+                  vibrationsSwitch
                 ],
               )
+            ],
+          )
         )
       ),
       actions: [
@@ -271,6 +284,8 @@ class ApplicationState extends State<Application> {
         .size
         .height;
 
+    _vibrationsActive = vibrationsSwitch.isActive;
+
     return MaterialApp(
         title: "Simple flutter fft example",
         theme: ThemeData.dark(),
@@ -298,4 +313,30 @@ class ApplicationState extends State<Application> {
         )
     );
   }
+}
+
+class SwitchWidget extends StatefulWidget {
+  bool isActive = true;
+
+  SwitchWidget({super.key});
+
+  @override
+  State<SwitchWidget> createState() => _SwitchWidgetState();
+}
+
+class _SwitchWidgetState extends State<SwitchWidget> {
+  @override
+  Widget build(BuildContext context) {
+    return Switch(
+      // This bool value toggles the switch.
+      value: widget.isActive,
+      activeColor: Colors.red,
+      onChanged: (bool value) {
+        // This is called when the user toggles the switch.
+        setState(() {
+          widget.isActive = value;
+        });
+      },
+    );
   }
+}
