@@ -23,6 +23,9 @@ class MyApp extends StatelessWidget {
   }
 }
 
+final double minMicDb = 45.0;
+final double maxMicDb = 95.0;
+
 class Application extends StatefulWidget {
   @override
   ApplicationState createState() => ApplicationState();
@@ -46,8 +49,8 @@ class ApplicationState extends State<Application> {
   bool _vibrationsActive = true;
 
   // Min/max accepted decibel reading
-  final double minMicDb = 45.0;
-  final double maxMicDb = 95.0;
+  double rangeMinDb = minMicDb;
+  double rangeMaxDb = maxMicDb;
 
   // Current volume reading
   double currDb = 0.0;
@@ -99,11 +102,12 @@ class ApplicationState extends State<Application> {
 
   bool _appInFocus = true;
   late SwitchWidget vibrationsSwitch;
+  late RangeSliderWidget volumeSlider;
 
   _updateHeightAndWidthBasedOnVolume() async {
-    newHeight = _newValueInMappedRange(currDb, minMicDb, maxMicDb, heightMin, heightMax);
-    newWidth = _newValueInMappedRange(currDb, minMicDb, maxMicDb, widthMin, widthMax);
-    newValue = _newValueInMappedRange(currDb, minMicDb, maxMicDb, minValue, maxValue);
+    newHeight = _newValueInMappedRange(currDb, rangeMinDb, rangeMaxDb, heightMin, heightMax);
+    newWidth = _newValueInMappedRange(currDb, rangeMinDb, rangeMaxDb, widthMin, widthMax);
+    newValue = _newValueInMappedRange(currDb, rangeMinDb, rangeMaxDb, minValue, maxValue);
     hsvColor = hsvColor.withValue(newValue);
   }
 
@@ -170,6 +174,7 @@ class ApplicationState extends State<Application> {
     });
 
     vibrationsSwitch = SwitchWidget();
+    volumeSlider = RangeSliderWidget();
     super.initState();
     _initialize();
   }
@@ -201,8 +206,8 @@ class ApplicationState extends State<Application> {
       _noiseSubscription = _noiseMeter.noiseStream.listen(onData);
 
       Timer.periodic(const Duration(seconds: 1), (timer) async {
-          acceptedDb = currDb - minMicDb;
-          acceptedDbScale = acceptedDb / (maxMicDb - minMicDb);
+          acceptedDb = currDb - rangeMinDb;
+          acceptedDbScale = acceptedDb / (rangeMaxDb - rangeMinDb);
           _updateHeightAndWidthBasedOnVolume();
           destVibe = (maxVibe * acceptedDbScale).floor();
 
@@ -251,6 +256,12 @@ class ApplicationState extends State<Application> {
                   const Spacer(),
                   vibrationsSwitch
                 ],
+              ),
+              Column(
+                children: [
+                  const Text("Adjust your volume range"),
+                  volumeSlider
+                ],
               )
             ],
           )
@@ -285,6 +296,8 @@ class ApplicationState extends State<Application> {
         .height;
 
     _vibrationsActive = vibrationsSwitch.isActive;
+    rangeMinDb = volumeSlider.min;
+    rangeMaxDb = volumeSlider.max;
 
     return MaterialApp(
         title: "Simple flutter fft example",
@@ -335,6 +348,42 @@ class _SwitchWidgetState extends State<SwitchWidget> {
         // This is called when the user toggles the switch.
         setState(() {
           widget.isActive = value;
+        });
+      },
+    );
+  }
+}
+
+class RangeSliderWidget extends StatefulWidget {
+  // int rangeMin = 45;
+  // final int rangeMax = 90;
+  double min = 45.0;
+  double max = 95.0;
+
+  RangeSliderWidget({super.key});
+
+  @override
+  State<RangeSliderWidget> createState() => _RangeSliderWidgetState();
+}
+
+class _RangeSliderWidgetState extends State<RangeSliderWidget> {
+  @override
+  Widget build(BuildContext context) {
+    // RangeValues _currentRangeValues = const RangeValues(widget.min, widget.max);
+
+    return RangeSlider(
+      values: RangeValues(widget.min, widget.max),
+      min: 45,
+      max: 95,
+      divisions: 10,
+      labels: RangeLabels(
+        RangeValues(widget.min, widget.max).start.round().toString(),
+        RangeValues(widget.min, widget.max).end.round().toString(),
+      ),
+      onChanged: (RangeValues values) {
+        setState(() {
+          widget.min = values.start;
+          widget.max = values.end;
         });
       },
     );
