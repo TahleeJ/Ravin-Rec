@@ -32,6 +32,7 @@ class ApplicationState extends State<Application> {
     start();
     maxDb = 0.0;
     minDb = 1000.0;
+
     print("Starting recorder...");
     // print("Before");
     // bool hasPermission = await flutterFft.checkPermission();
@@ -48,28 +49,12 @@ class ApplicationState extends State<Application> {
     print("Recorder started...");
     setState(() => isRecording = flutterFft.getIsRecording);
 
-    // if ((await Vibration.hasVibrator())!) {}
-
-    // if ((await Vibration.hasAmplitudeControl())!) {
-    //   while (true) {
-    //     int i = 1;
-    //     for (; i < 26; i++) {
-    //       print(i*10);
-    //       Vibration.vibrate(duration: 2000, amplitude: i*10);
-    //       await Future.delayed(const Duration(seconds: 2));
-    //     }
-    //   }
-    // }
-
-    // double dbScale = dbVal / 150;
-    // double vibeVal = 255 * dbScale;
-
     flutterFft.onRecorderStateChanged.listen(
             (data) => {
-          // print("Changed state, received: $data"),
+          print("Changed state, received: $data"),
           setState(
                 () => {
-              // frequency = data[1] as double,
+              frequency = data[1] as double,
               note = data[2] as String,
               octave = data[5] as int,
             },
@@ -77,7 +62,7 @@ class ApplicationState extends State<Application> {
           // flutterFft.setNote = note!,
           // flutterFft.setFrequency = frequency!,
           // flutterFft.setOctave = octave!,
-          // print(frequency.toString())
+          // print("Octave: ${octave!.toString()}")
         },
         onError: (err) {
           print("Error: $err");
@@ -91,12 +76,12 @@ class ApplicationState extends State<Application> {
 
   @override
   void initState() {
-    super.initState();
     _noiseMeter = new NoiseMeter(onError);
     isRecording = flutterFft.getIsRecording;
     frequency = flutterFft.getFrequency;
     note = flutterFft.getNote;
     octave = flutterFft.getOctave;
+    super.initState();
     _initialize();
   }
 
@@ -121,22 +106,11 @@ class ApplicationState extends State<Application> {
         this._isRecording = true;
       }
     });
-    // frequency = noiseReading.meanDecibel;
-    maxDb = max(maxDb, noiseReading.maxDecibel);
-    minDb = min(minDb, noiseReading.meanDecibel);
+
+    // maxDb = max(maxDb, noiseReading.maxDecibel);
+    // minDb = min(minDb, noiseReading.meanDecibel);
     meanDb = noiseReading.meanDecibel;
     currDb = noiseReading.meanDecibel;
-    // print(currDb);
-    //
-    // auxDb = meanDb - minMicDb;
-    // auxDbScale = auxDb / (maxDb - minMicDb);
-    // print(meanDb.toString() + "," + (meanDb - minMicDb).toString() + ", " + auxDbScale.toString() + ", " + (maxVibe * auxDbScale).floor().toString());
-    //
-    // destVibe = (maxVibe * auxDbScale).floor();
-    //
-    // Vibration.vibrate(pattern: [0, 120], intensities: [currVibe, destVibe]);
-
-    // print(noiseReading.toString());
   }
 
   void onError(Object error) {
@@ -148,28 +122,14 @@ class ApplicationState extends State<Application> {
     try {
       _noiseSubscription = _noiseMeter.noiseStream.listen(onData);
 
-      Timer.periodic(const Duration(seconds: 3), (timer) async {
-        print("enter");
-        // if (this._isRecording) {
-        // print(currDb);
+      Timer.periodic(const Duration(seconds: 1), (timer) async {
           auxDb = currDb - minMicDb;
           auxDbScale = auxDb / (maxMicDb - minMicDb);
           // print(meanDb.toString() + "," + (meanDb - minMicDb).toString() + ", " + auxDbScale.toString() + ", " + (maxVibe * auxDbScale).floor().toString());
 
           destVibe = (maxVibe * auxDbScale).floor();
-          // print(destVibe);
 
-          // Vibration.vibrate(pattern: [0, 1000, 0, 1000, 0, 1000], intensities: [destVibe, (destVibe / 2).floor(), (destVibe / 4).floor()]);
-        print("first vibe");
-          Vibration.vibrate(duration: 1000, amplitude: destVibe);
-          await Future.delayed(Duration(milliseconds: 1000));
-          print("second vibe");
-          Vibration.vibrate(duration: 1000, amplitude: (destVibe / 2).floor());
-          await Future.delayed(Duration(milliseconds: 1000));
-        print("third vibe");
-          Vibration.vibrate(duration: 1000, amplitude: (destVibe / 4).floor());
-          await Future.delayed(Duration(milliseconds: 1000));
-        // }
+          Vibration.vibrate(pattern: [0, 200, 0, 200, 0, 200], intensities: [0, (destVibe / 4).floor(), 0, (destVibe / 2).floor(), 0, destVibe]);
       });
     } catch (err) {
       print(err);
@@ -192,7 +152,6 @@ class ApplicationState extends State<Application> {
 
   void _reset() {
     _initialize();
-    // dispose();
   }
 
   @override
@@ -207,24 +166,11 @@ class ApplicationState extends State<Application> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                isRecording!
-                    ? Text("Max: ${maxDb!.toString()}",
-                    style: TextStyle(fontSize: 30))
-                    : Text("Not Recording", style: TextStyle(fontSize: 35)),
-                isRecording!
-                    ? Text("Min: ${note!},${minDb!.toString()}",
-                    style: TextStyle(fontSize: 30))
-                    : Text("Not Recording", style: TextStyle(fontSize: 35)),
-                isRecording!
+                _isRecording!
                     ? Text(
-                    "Mean: ${meanDb.toString()}",
+                    "Mean: ${frequency.toString()}",
                     style: TextStyle(fontSize: 30))
                     : Text("Not Recording", style: TextStyle(fontSize: 35)),
-                IconButton(
-                  iconSize: 96.0,
-                  icon: Icon(Icons.mic),
-                  onPressed: _reset,
-                ),
               ],
             ),
           ),
