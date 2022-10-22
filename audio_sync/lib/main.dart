@@ -36,18 +36,55 @@ class ApplicationState extends State<Application> {
 
   final double minMicDb = 45.0;
   final double maxMicDb = 75.0;
+
   final int maxVibe = 255;
+  int destVibe = 0;
+  int currVibe = 0;
+
   double widthMin = 5.0;
   double widthMax = 300.0;
   double newWidth = 0.0;
+
   final double heightMin = 10.0;
   double heightMax = 300.0;
   double newHeight = 5.0;
-  double newValue = 0.0;
+
   double minValue = 0.2;
   double maxValue = 1.0;
-  HSVColor hsvColor = HSVColor.fromAHSV(1.0, 217.0, 1.0, 1.0);
+  double newValue = 0.0;
 
+  HSVColor hsvColor = HSVColor.fromAHSV(1.0, 217.0, 1.0, 1.0);
+  final double violetHue = 255.0;
+  final double minRedHue = 0.0;
+  final double magentaHue = 255.1;
+  final double maxRedHue = 360.0;
+  double newHue = 0.0;
+
+  double minFreq = 155.0;
+  double maxFreq = 4978.0;
+  double freqScale = 1.0;
+  double splitFreq = 0.0;
+
+  double minDb = 1000.0;
+  double maxDb = 0.0;
+  double currDb = 0.0;
+
+  // double meanDb = 0.0;
+
+  double auxDb = 0.0;
+  double auxDbScale = 0.0;
+
+
+  // final int redFreq = 750;
+  // final int yellowFreq = 1400;
+  // final int greenFreq = 2050;
+  // final int cyanFreq = 2700;
+  // final int blueFreq = 3350;
+  // final int magentaFreq = 4000;
+  // int r = 255;
+  // int g = 255;
+  // int b = 255;
+  // double hue = 0.0;
 
   _updateHeightAndWidthBasedOnVolume() async {
     newHeight = _newValueInMappedRange(currDb, minMicDb, maxMicDb, heightMin, heightMax);
@@ -93,6 +130,26 @@ class ApplicationState extends State<Application> {
               octave = data[5] as int,
             },
           ),
+          // print(frequency.toString()),
+          if (frequency! > maxFreq) {
+            frequency = maxFreq,
+          },
+          if (frequency! < minFreq) {
+            frequency = minFreq,
+          },
+          freqScale = violetHue / maxRedHue,
+          splitFreq = ((maxFreq * freqScale) - minFreq + 1) + minFreq,
+          // print("split is " + splitFreq.toString()),
+          // print("at splitF, should be 360: " + (violetHue + maxRedHue - _newValueInMappedRange(splitFreq, splitFreq, maxFreq, magentaHue, maxRedHue)).toString()),
+          // print("at maxF, should be 255: " + (violetHue + maxRedHue - _newValueInMappedRange(maxFreq +1, splitFreq, maxFreq, magentaHue, maxRedHue)).toString()),
+          if (frequency! >= splitFreq) {
+            newHue = violetHue + maxRedHue - _newValueInMappedRange(frequency!, splitFreq, maxFreq, magentaHue, maxRedHue),
+          } else {
+            newHue = violetHue - _newValueInMappedRange(frequency!, minFreq, splitFreq - .1, minRedHue, violetHue),
+          },
+          // newHue = violetHue - _newValueInMappedRange(frequency!, minFreq, maxFreq, minRedHue, violetHue),
+          hsvColor = hsvColor.withHue(newHue),
+          // print(newHue),
         },
         onError: (err) {
           print("Error: $err");
@@ -121,15 +178,6 @@ class ApplicationState extends State<Application> {
     super.dispose();
   }
 
-  double currDb = 0.0;
-  double maxDb = 0.0;
-  double minDb = 1000.0;
-  double meanDb = 0.0;
-  double auxDb = 0.0;
-  double auxDbScale = 0.0;
-  int currVibe = 0;
-  int destVibe = 0;
-
   void onData(NoiseReading noiseReading) {
     this.setState(() {
       if (!this._isRecording) {
@@ -139,7 +187,7 @@ class ApplicationState extends State<Application> {
 
     // maxDb = max(maxDb, noiseReading.maxDecibel);
     // minDb = min(minDb, noiseReading.meanDecibel);
-    meanDb = noiseReading.meanDecibel;
+    // meanDb = noiseReading.meanDecibel;
     currDb = noiseReading.meanDecibel;
   }
 
