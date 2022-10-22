@@ -43,13 +43,24 @@ class ApplicationState extends State<Application> {
   final double heightMin = 10.0;
   double heightMax = 300.0;
   double newHeight = 5.0;
+  double newValue = 0.0;
+  double minValue = 0.2;
+  double maxValue = 1.0;
+  HSVColor hsvColor = HSVColor.fromAHSV(1.0, 217.0, 1.0, 1.0);
+
 
   _updateHeightAndWidthBasedOnVolume() async {
-    currDb <= minMicDb? newWidth = widthMin : newWidth = (currDb - minMicDb) * (widthMax - widthMin)/(maxMicDb - minMicDb) + widthMin;
-    currDb >= maxMicDb? newWidth = widthMax : newWidth = (currDb - minMicDb) * (widthMax - widthMin)/(maxMicDb - minMicDb) + widthMin;
-    currDb <= minMicDb? newHeight = heightMin : newHeight = (currDb - minMicDb) * (heightMax - heightMin)/(maxMicDb - minMicDb) + heightMin;
-    currDb >= maxMicDb? newHeight = heightMax : newHeight = (currDb - minMicDb) * (heightMax - heightMin)/(maxMicDb - minMicDb) + heightMin;
-    // print("new radius, volume: " + newWidth.toString() + ",  " + currDb.toString());
+    newHeight = _newValueInMappedRange(currDb, minMicDb, maxMicDb, heightMin, heightMax);
+    newWidth = _newValueInMappedRange(currDb, minMicDb, maxMicDb, widthMin, widthMax);
+    newValue = _newValueInMappedRange(currDb, minMicDb, maxMicDb, minValue, maxValue);
+    hsvColor = hsvColor.withValue(newValue);
+  }
+
+  double _newValueInMappedRange(double curr_range1, double min_range1, double max_range1, double min_range2, double max_range2)  {
+    double curr_range2 = 0.0;
+    curr_range1 >= max_range1 ? curr_range2 = max_range2 : curr_range2 = (curr_range1 - min_range1) * (max_range2 - min_range2)/(max_range1 - min_range1) + min_range2;
+    curr_range1 <= min_range1 ? curr_range2 = min_range2 : curr_range2 = curr_range2;
+    return curr_range2;
   }
 
   _initialize() async {
@@ -177,13 +188,12 @@ class ApplicationState extends State<Application> {
   Widget build(BuildContext context) {
     widthMax = MediaQuery.of(context).size.width;
     heightMax = MediaQuery.of(context).size.height;
-    print(MediaQuery.of(context).size.height);
     return MaterialApp(
         title: "Simple flutter fft example",
         theme: ThemeData.dark(),
         color: Colors.blue,
         home: Scaffold(
-          backgroundColor: Colors.purple,
+          backgroundColor: Colors.black,
           body: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -192,7 +202,7 @@ class ApplicationState extends State<Application> {
                   width: newWidth,
                   height: newHeight,
                   decoration: new BoxDecoration(
-                    color: Colors.blue,
+                    color: hsvColor.toColor(),
                     shape: BoxShape.rectangle,
                   ),
                 ),
