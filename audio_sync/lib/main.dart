@@ -43,6 +43,12 @@ class ApplicationState extends State<Application> {
   final double heightMin = 10.0;
   double heightMax = 300.0;
   double newHeight = 5.0;
+  double newValue = 0.0;
+  double newHue = 0;
+  double minValue = 0.2;
+  double maxValue = 1.0;
+  HSVColor hsvColor = HSVColor.fromAHSV(1.0, 217.0, 1.0, 1.0);
+
 
   final int redFreq = 750;
   final int yellowFreq = 1400;
@@ -53,13 +59,20 @@ class ApplicationState extends State<Application> {
   int r = 255;
   int g = 255;
   int b = 255;
+  double hue = 0.0;
 
   _updateHeightAndWidthBasedOnVolume() async {
-    currDb <= minMicDb? newWidth = widthMin : newWidth = (currDb - minMicDb) * (widthMax - widthMin)/(maxMicDb - minMicDb) + widthMin;
-    currDb >= maxMicDb? newWidth = widthMax : newWidth = (currDb - minMicDb) * (widthMax - widthMin)/(maxMicDb - minMicDb) + widthMin;
-    currDb <= minMicDb? newHeight = heightMin : newHeight = (currDb - minMicDb) * (heightMax - heightMin)/(maxMicDb - minMicDb) + heightMin;
-    currDb >= maxMicDb? newHeight = heightMax : newHeight = (currDb - minMicDb) * (heightMax - heightMin)/(maxMicDb - minMicDb) + heightMin;
-    // print("new radius, volume: " + newWidth.toString() + ",  " + currDb.toString());
+    newHeight = _newValueInMappedRange(currDb, minMicDb, maxMicDb, heightMin, heightMax);
+    newWidth = _newValueInMappedRange(currDb, minMicDb, maxMicDb, widthMin, widthMax);
+    newValue = _newValueInMappedRange(currDb, minMicDb, maxMicDb, minValue, maxValue);
+    hsvColor = hsvColor.withValue(newValue);
+  }
+
+  double _newValueInMappedRange(double curr_range1, double min_range1, double max_range1, double min_range2, double max_range2)  {
+    double curr_range2 = 0.0;
+    curr_range1 >= max_range1 ? curr_range2 = max_range2 : curr_range2 = (curr_range1 - min_range1) * (max_range2 - min_range2)/(max_range1 - min_range1) + min_range2;
+    curr_range1 <= min_range1 ? curr_range2 = min_range2 : curr_range2 = curr_range2;
+    return curr_range2;
   }
 
   _initialize() async {
@@ -93,36 +106,44 @@ class ApplicationState extends State<Application> {
             },
           ),
               if (frequency! < redFreq) {
-                r = ((frequency! / redFreq) * 255).floor(),
-                g = b = 0,
+                // r = ((frequency! / redFreq) * 255).floor(),
+                // g = b = 0,
+                hue = (frequency! / redFreq) * 60,
                 // print(((frequency! / redFreq) * 255).floor().toString() + " (" + r.toString() + ", " + g.toString() + ", " + b.toString()
                 print("red")
               } else if (frequency! < yellowFreq) {
-                r = 255,
-                g =  ((frequency! / yellowFreq) * 255).floor(),
-                b = 0,
+                // r = 255,
+                // g =  ((frequency! / yellowFreq) * 255).floor(),
+                // b = 0,
+                hue = (frequency! / yellowFreq) * 60 + 61,
                 print("yellow")
               } else if (frequency! < greenFreq) {
-                r = 0,
-                g =  ((frequency! / greenFreq) * 255).floor(),
-                b = 0,
+                // r = 0,
+                // g =  ((frequency! / greenFreq) * 255).floor(),
+                // b = 0,
+                hue = (frequency! / greenFreq) * 60 + 121,
                 print("green")
               } else if (frequency! < cyanFreq) {
-                r = 0,
-                g = 255,
-                b = ((frequency! / cyanFreq) * 255).floor(),
+                // r = 0,
+                // g = 255,
+                // b = ((frequency! / cyanFreq) * 255).floor(),
+                hue = (frequency! / cyanFreq) * 60 + 181,
                 print("cyan")
               } else if (frequency! < blueFreq) {
-                r = g = 0,
-                b = ((frequency! / blueFreq) * 255).floor(),
+                // r = g = 0,
+                // b = ((frequency! / blueFreq) * 255).floor(),
+                hue = (frequency! / blueFreq) * 60 + 241,
                 print("blue")
               } else {
-                r = 255,
-                g = 0,
-                b = ((frequency! / magentaFreq) * 255).floor(),
+                // r = 255,
+                // g = 0,
+                // b = ((frequency! / magentaFreq) * 255).floor(),
+                hue = (frequency! / magentaFreq) * 60 + 301,
                 print("magenta")
               },
-              print(frequency.toString())
+              // print(frequency.toString()),
+              hsvColor = hsvColor.withHue(hue),
+              print(hue)
         },
         onError: (err) {
           print("Error: $err");
@@ -218,13 +239,12 @@ class ApplicationState extends State<Application> {
   Widget build(BuildContext context) {
     widthMax = MediaQuery.of(context).size.width;
     heightMax = MediaQuery.of(context).size.height;
-    // print(MediaQuery.of(context).size.height);
     return MaterialApp(
         title: "Simple flutter fft example",
         theme: ThemeData.dark(),
         color: Colors.blue,
         home: Scaffold(
-          backgroundColor: Colors.purple,
+          backgroundColor: Colors.black,
           body: Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -233,7 +253,7 @@ class ApplicationState extends State<Application> {
                   width: newWidth,
                   height: newHeight,
                   decoration: new BoxDecoration(
-                    color: Color.fromRGBO(r, g, b, 1.0),
+                    color: hsvColor.toColor(),
                     shape: BoxShape.rectangle,
                   ),
                 ),
