@@ -37,9 +37,9 @@ class ApplicationState extends State<Application> {
   final double minMicDb = 45.0;
   final double maxMicDb = 75.0;
   final int maxVibe = 255;
-  final double widthMin = 5.0;
+  double widthMin = 5.0;
   double widthMax = 300.0;
-  double newWidth = 5.0;
+  double newWidth = 0.0;
   final double heightMin = 10.0;
   double heightMax = 300.0;
   double newHeight = 5.0;
@@ -188,6 +188,8 @@ class ApplicationState extends State<Application> {
   Widget build(BuildContext context) {
     widthMax = MediaQuery.of(context).size.width;
     heightMax = MediaQuery.of(context).size.height;
+    widthMin = heightMin * widthMax / heightMax;
+    // newWidth = widthMin;
     return MaterialApp(
         title: "Simple flutter fft example",
         theme: ThemeData.dark(),
