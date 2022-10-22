@@ -9,6 +9,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_fft/flutter_fft.dart';
+import 'package:flutter_fgbg/flutter_fgbg.dart';
+
+final double minMicDb = 45.0;
+final double maxMicDb = 95.0;
+final double systemMinFreq = 155.0;
+final double systemMaxFreq = 4978.0;
+bool firstPass = false;
 
 void main() => runApp(MyApp());
 
@@ -28,55 +35,83 @@ class Application extends StatefulWidget {
 }
 
 class ApplicationState extends State<Application> {
+  // Frequency readings
+  FlutterFft flutterFft = FlutterFft();
   double? frequency;
-  String? note;
-  int? octave;
   bool? isRecording;
 
-  FlutterFft flutterFft = new FlutterFft();
+  // Volume readings
+  bool _isRecording = false;
+  late NoiseMeter _noiseMeter;
+  StreamSubscription<NoiseReading>? _noiseSubscription;
 
-  final double minMicDb = 45.0;
-  final double maxMicDb = 95+.0;
+  // App foreground/background readings
+  late StreamSubscription<FGBGType> subscription;
 
+  // Vibrations toggle value
+  bool _vibrationsActive = true;
+
+  // Min/max accepted decibel reading
+  double rangeMinDb = minMicDb;
+  double rangeMaxDb = maxMicDb;
+
+  // Current volume reading
+  double currDb = 0.0;
+
+  // Read volume shifted towards 0 using the minimum accepted decibel reading
+  double acceptedDb = 0.0;
+
+  // Read volume shifted on a 0.0-1.0 scale using the min/max accepted decibel readings
+  double acceptedDbScale = 0.0;
+
+  // Max accepted vibration intensity
   final int maxVibe = 255;
-  int destVibe = 0;
-  int currVibe = 0;
 
-  double widthMin = 5.0;
+  // Target vibration intensity
+  int destVibe = 0;
+
+  // Min/max accepted mic frequency
+  double userMinFreq = 155.0;
+  double userMaxFreq = 4978.0;
+  double freqScale = 1.0;
+
+  // The frequency at which high/low color tones are set
+  double splitFreq = 0.0;
+
+  // Shape's width resizing
+  final double widthMin = 5.0;
   double widthMax = 300.0;
   double newWidth = 0.0;
 
+  // Shape's height resizing
   final double heightMin = 10.0;
   double heightMax = 300.0;
   double newHeight = 5.0;
 
+  // Shape's HSVColor value
   double minValue = 0.2;
   double maxValue = 1.0;
   double newValue = 0.0;
 
+  // Shape's HSV target
   HSVColor hsvColor = HSVColor.fromAHSV(1.0, 217.0, 1.0, 1.0);
+
+  // Shape's HSV hue
   final double violetHue = 255.0;
   final double minRedHue = 0.0;
   final double magentaHue = 255.1;
   final double maxRedHue = 360.0;
   double newHue = 0.0;
 
-  double minFreq = 155.0;
-  double maxFreq = 4978.0;
-  double freqScale = 1.0;
-  double splitFreq = 0.0;
+  bool _appInFocus = true;
+  late SwitchWidget vibrationsSwitch;
+  late RangeSliderWidget volumeSlider;
+  late RangeSliderWidget frequencyDoubleSlider;
 
-  double minDb = 1000.0;
-  double maxDb = 0.0;
-  double currDb = 0.0;
-
-  double auxDb = 0.0;
-  double auxDbScale = 0.0;
-
-  _updateHeightAndWidthBasedOnVolume() async {
-    newHeight = _newValueInMappedRange(currDb, minMicDb, maxMicDb, heightMin, heightMax);
-    newWidth = _newValueInMappedRange(currDb, minMicDb, maxMicDb, widthMin, widthMax);
-    newValue = _newValueInMappedRange(currDb, minMicDb, maxMicDb, minValue, maxValue);
+  _updateBasedOnVolume() async {
+    newHeight = _newValueInMappedRange(currDb, rangeMinDb, rangeMaxDb, heightMin, heightMax);
+    newWidth = _newValueInMappedRange(currDb, rangeMinDb, rangeMaxDb, widthMin, widthMax);
+    newValue = _newValueInMappedRange(currDb, rangeMinDb, rangeMaxDb, minValue, maxValue);
     hsvColor = hsvColor.withValue(newValue);
   }
 
@@ -89,13 +124,6 @@ class ApplicationState extends State<Application> {
 
   _initialize() async {
     start();
-    maxDb = 0.0;
-    minDb = 1000.0;
-
-    print("Starting recorder...");
-    // print("Before");
-    // bool hasPermission = await flutterFft.checkPermission();
-    // print("After: " + hasPermission.toString());
 
     // Keep asking for mic permission until accepted
     while (!(await flutterFft.checkPermission())) {
@@ -103,9 +131,7 @@ class ApplicationState extends State<Application> {
       // IF DENY QUIT PROGRAM
     }
 
-    // await flutterFft.checkPermissions();
     await flutterFft.startRecorder();
-    print("Recorder started...");
     setState(() => isRecording = flutterFft.getIsRecording);
 
     flutterFft.onRecorderStateChanged.listen(
@@ -116,41 +142,48 @@ class ApplicationState extends State<Application> {
             },
           ),
           // print(frequency.toString()),
-          if (frequency! > maxFreq) {
-            frequency = maxFreq,
+          if (frequency! > userMaxFreq) {
+            frequency = userMaxFreq,
           },
-          if (frequency! < minFreq) {
-            frequency = minFreq,
+          if (frequency! < userMinFreq) {
+            frequency = userMinFreq,
           },
           freqScale = violetHue / maxRedHue,
-          splitFreq = ((maxFreq * freqScale) - minFreq + 1) + minFreq,
-          // print("split is " + splitFreq.toString()),
-          // print("at splitF, should be 360: " + (violetHue + maxRedHue - _newValueInMappedRange(splitFreq, splitFreq, maxFreq, magentaHue, maxRedHue)).toString()),
-          // print("at maxF, should be 255: " + (violetHue + maxRedHue - _newValueInMappedRange(maxFreq +1, splitFreq, maxFreq, magentaHue, maxRedHue)).toString()),
+          splitFreq = ((userMaxFreq * freqScale) - userMinFreq + 1) + userMinFreq,
           if (frequency! >= splitFreq) {
-            newHue = violetHue + maxRedHue - _newValueInMappedRange(frequency!, splitFreq, maxFreq, magentaHue, maxRedHue),
+            newHue = violetHue + maxRedHue - _newValueInMappedRange(frequency!, splitFreq, userMaxFreq, magentaHue, maxRedHue),
           } else {
-            newHue = violetHue - _newValueInMappedRange(frequency!, minFreq, splitFreq - .1, minRedHue, violetHue),
+            newHue = violetHue - _newValueInMappedRange(frequency!, userMinFreq, splitFreq - .1, minRedHue, violetHue),
           },
-          // newHue = violetHue - _newValueInMappedRange(frequency!, minFreq, maxFreq, minRedHue, violetHue),
+          // newHue = violetHue - _newValueInMappedRange(frequency!, userMinFreq, userMaxFreq, minRedHue, violetHue),
           hsvColor = hsvColor.withHue(newHue),
           // print(newHue),
         },
         onError: (err) {
           print("Error: $err");
         },
-        onDone: () => {print("Isdone")});
+        onDone: () => {print("Done")});
   }
-
-  bool _isRecording = false;
-  StreamSubscription<NoiseReading>? _noiseSubscription;
-  late NoiseMeter _noiseMeter;
 
   @override
   void initState() {
     _noiseMeter = new NoiseMeter(onError);
     isRecording = flutterFft.getIsRecording;
     frequency = flutterFft.getFrequency;
+    subscription = FGBGEvents.stream.listen((event) {
+      _appInFocus = event == FGBGType.foreground;
+    });
+
+    vibrationsSwitch = SwitchWidget();
+    if (firstPass) {
+        volumeSlider = RangeSliderWidget(minMicDb, maxMicDb, minMicDb, maxMicDb, 0.0, 0.0, (maxMicDb - minMicDb - 1).floor() as int, firstPass);
+        frequencyDoubleSlider = RangeSliderWidget(220.0, 880.0, systemMinFreq, systemMaxFreq, 0.0, 0.0, (systemMaxFreq - systemMinFreq - 1).floor() as int, firstPass);
+        firstPass = !firstPass;
+    } else {
+      volumeSlider = RangeSliderWidget(minMicDb, maxMicDb, minMicDb, maxMicDb, rangeMinDb, rangeMaxDb, (maxMicDb - minMicDb - 1).floor() as int, firstPass);
+      frequencyDoubleSlider = RangeSliderWidget(220.0, 880.0, systemMinFreq, systemMaxFreq, userMinFreq, userMaxFreq, (systemMaxFreq - systemMinFreq - 1).floor() as int, firstPass);
+    }
+
     super.initState();
     _initialize();
   }
@@ -158,13 +191,14 @@ class ApplicationState extends State<Application> {
   @override
   void dispose() {
     _noiseSubscription?.cancel();
+    subscription.cancel();
     super.dispose();
   }
 
   void onData(NoiseReading noiseReading) {
-    this.setState(() {
-      if (!this._isRecording) {
-        this._isRecording = true;
+    setState(() {
+      if (!_isRecording) {
+        _isRecording = true;
       }
     });
 
@@ -181,12 +215,14 @@ class ApplicationState extends State<Application> {
       _noiseSubscription = _noiseMeter.noiseStream.listen(onData);
 
       Timer.periodic(const Duration(seconds: 1), (timer) async {
-          auxDb = currDb - minMicDb;
-          auxDbScale = auxDb / (maxMicDb - minMicDb);
-          _updateHeightAndWidthBasedOnVolume();
-          destVibe = (maxVibe * auxDbScale).floor();
+          acceptedDb = currDb - rangeMinDb;
+          acceptedDbScale = acceptedDb / (rangeMaxDb - rangeMinDb);
+          _updateBasedOnVolume();
+          destVibe = (maxVibe * acceptedDbScale).floor();
 
-          Vibration.vibrate(pattern: [0, 200, 0, 200, 0, 200], intensities: [0, (destVibe / 4).floor(), 0, (destVibe / 2).floor(), 0, destVibe]);
+          if (_appInFocus && _vibrationsActive) {
+            Vibration.vibrate(pattern: [0, 200, 0, 200, 0, 200], intensities: [0, (destVibe / 4).floor(), 0, (destVibe / 2).floor(), 0, destVibe]);
+          }
       });
     } catch (err) {
       print(err);
@@ -199,21 +235,17 @@ class ApplicationState extends State<Application> {
         _noiseSubscription!.cancel();
         _noiseSubscription = null;
       }
-      this.setState(() {
-        this._isRecording = false;
+      setState(() {
+        _isRecording = false;
       });
     } catch (err) {
-      print('stopRecorder error: $err');
+      print('stop recorder error: $err');
     }
-  }
-
-  void _reset() {
-    _initialize();
   }
 
   void buildSettings(BuildContext context) {
     Widget closeButton = TextButton(
-      child: Text("Close", style: TextStyle(fontSize: 16)),
+      child: const Text("Close", style: TextStyle(fontSize: 16)),
       onPressed: () {
         closePopup(context);
       },
@@ -221,15 +253,33 @@ class ApplicationState extends State<Application> {
 
     AlertDialog settingsAlert = AlertDialog(
       title: const Text("Settings"),
-      content: Container(
-            height: MediaQuery.of(context).size.height * (1/3),
-            width: MediaQuery.of(context).size.width * (2/3),
-            child: Center(
-              child: Column(
+      content: SizedBox(
+        height: MediaQuery.of(context).size.height * (1/3),
+        width: MediaQuery.of(context).size.width * (2/3),
+        child: Center(
+          child: Column(
+            children: [
+              Row(
                 children: [
-                  Text("your settings here!", style: TextStyle(fontSize: 15))
+                  const Text("Toggle Vibrations"),
+                  const Spacer(),
+                  vibrationsSwitch
+                ],
+              ),
+              Column(
+                children: [
+                  const Text("Adjust your volume range"),
+                  volumeSlider
+                ],
+              ),
+              Column(
+                children: [
+                  const Text("Adjust your frequency/pitch range"),
+                  frequencyDoubleSlider,
                 ],
               )
+            ],
+          )
         )
       ),
       actions: [
@@ -260,7 +310,14 @@ class ApplicationState extends State<Application> {
         .of(context)
         .size
         .height;
-    
+
+    _vibrationsActive = vibrationsSwitch.isActive;
+    rangeMinDb = volumeSlider.setMin;
+    rangeMaxDb = volumeSlider.setMax;
+    userMinFreq = frequencyDoubleSlider.absMin;
+    userMaxFreq = frequencyDoubleSlider.absMax;
+
+
     return MaterialApp(
         title: "Simple flutter fft example",
         theme: ThemeData.dark(),
@@ -288,4 +345,88 @@ class ApplicationState extends State<Application> {
         )
     );
   }
+}
+
+class SwitchWidget extends StatefulWidget {
+  bool isActive = true;
+
+  SwitchWidget({super.key});
+
+  @override
+  State<SwitchWidget> createState() => _SwitchWidgetState();
+}
+
+class _SwitchWidgetState extends State<SwitchWidget> {
+  @override
+  Widget build(BuildContext context) {
+    return Switch(
+      // This bool value toggles the switch.
+      value: widget.isActive,
+      activeColor: Colors.red,
+      onChanged: (bool value) {
+        // This is called when the user toggles the switch.
+        setState(() {
+          widget.isActive = value;
+        });
+      },
+    );
   }
+}
+
+class RangeSliderWidget extends StatefulWidget {
+  // int rangeMin = 45;
+  // final int rangeMax = 90;
+  double initMin;
+  double initMax;
+  double absMin;
+  double absMax;
+  double setMin;
+  double setMax;
+  int divisions;
+  bool firstPass;
+
+  RangeSliderWidget(
+      this.initMin,
+      this.initMax,
+      this.absMin,
+      this.absMax,
+      this.setMin,
+      this.setMax,
+      this.divisions,
+      this.firstPass,
+      {super.key}
+      );
+
+  @override
+  State<RangeSliderWidget> createState() => _RangeSliderWidgetState();
+}
+
+class _RangeSliderWidgetState extends State<RangeSliderWidget> {
+  @override
+  Widget build(BuildContext context) {
+    RangeValues _currentRangeValues;
+    if (firstPass) {
+      _currentRangeValues = RangeValues(widget.absMin, widget.absMax);
+    } else {
+      _currentRangeValues = RangeValues(widget.setMin, widget.setMax);
+    }
+
+    return RangeSlider(
+      values: _currentRangeValues,
+      min: widget.absMin,
+      max: widget.absMax,
+      divisions: widget.divisions,
+      labels: RangeLabels(
+        _currentRangeValues.start.round().toString(),
+        _currentRangeValues.end.round().toString(),
+      ),
+      onChanged: (RangeValues values) {
+        setState(() {
+          _currentRangeValues = values;
+          widget.setMin = values.start;
+          widget.setMax = values.end;
+        });
+      },
+    );
+  }
+}
