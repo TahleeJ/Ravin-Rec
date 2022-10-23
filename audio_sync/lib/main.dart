@@ -12,6 +12,12 @@ import 'package:flutter_fft/flutter_fft.dart';
 import 'package:flutter_fgbg/flutter_fgbg.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
+final double minMicDb = 45.0;
+final double maxMicDb = 95.0;
+final double systemMinFreq = 155.0;
+final double systemMaxFreq = 4978.0;
+bool firstPass = false;
+
 void main() => runApp(MyApp());
 
 class MyApp extends StatelessWidget {
@@ -23,9 +29,6 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
-final double minMicDb = 45.0;
-final double maxMicDb = 95.0;
 
 class Application extends StatefulWidget {
   @override
@@ -59,7 +62,9 @@ class ApplicationState extends State<Application> {
 
   // Sliders in settings
   late RangeSliderWidget volumeSlider;
+  late RangeSliderWidget frequencyDoubleSlider;
 
+  // Color picker in settings
   late BlockPickerWidget blockPicker;
 
   // Min/max accepted decibel reading
@@ -82,8 +87,8 @@ class ApplicationState extends State<Application> {
   int destVibe = 0;
 
   // Min/max accepted mic frequency
-  double minFreq = 155.0;
-  double maxFreq = 4978.0;
+  double userMinFreq = 155.0;
+  double userMaxFreq = 4978.0;
   double freqScale = 1.0;
 
   // The frequency at which high/low color tones are set
@@ -92,14 +97,14 @@ class ApplicationState extends State<Application> {
   // Shape's width resizing
   final double widthMin = 5.0;
   double widthMax = 300.0;
-  double newWidth = 5.0;
+  double newWidth = 0.0;
 
   // Shape's height resizing
   final double heightMin = 10.0;
   double heightMax = 300.0;
   double newHeight = 5.0;
 
-  // Shape's HSV value
+  // Shape's HSVColor value
   double minValue = 0.2;
   double maxValue = 1.0;
   double newValue = 0.0;
@@ -114,7 +119,10 @@ class ApplicationState extends State<Application> {
   final double maxRedHue = 360.0;
   double newHue = 0.0;
 
-  _updateHeightAndWidthBasedOnVolume() async {
+  Color _pickerColor = Color(0xff03a9f4);
+  Color _currentColor = Color(0xff03a9f4);
+
+  _updateBasedOnVolume() async {
     newHeight = _newValueInMappedRange(currDb, rangeMinDb, rangeMaxDb, heightMin, heightMax);
     newWidth = _newValueInMappedRange(currDb, rangeMinDb, rangeMaxDb, widthMin, widthMax);
 
@@ -149,31 +157,23 @@ class ApplicationState extends State<Application> {
             },
           ),
           // print(frequency.toString()),
-          if (frequency! > maxFreq) {
-            frequency = maxFreq,
+          if (frequency! > userMaxFreq) {
+            frequency = userMaxFreq,
           },
-          if (frequency! < minFreq) {
-            frequency = minFreq,
+          if (frequency! < userMinFreq) {
+            frequency = userMinFreq,
           },
           freqScale = violetHue / maxRedHue,
-          splitFreq = ((maxFreq * freqScale) - minFreq + 1) + minFreq,
-          // print("split is " + splitFreq.toString()),
-          // print("at splitF, should be 360: " + (violetHue + maxRedHue - _newValueInMappedRange(splitFreq, splitFreq, maxFreq, magentaHue, maxRedHue)).toString()),
-          // print("at maxF, should be 255: " + (violetHue + maxRedHue - _newValueInMappedRange(maxFreq +1, splitFreq, maxFreq, magentaHue, maxRedHue)).toString()),
+          splitFreq = ((userMaxFreq * freqScale) - userMinFreq + 1) + userMinFreq,
           if (frequency! >= splitFreq) {
-            newHue = violetHue + maxRedHue - _newValueInMappedRange(frequency!, splitFreq, maxFreq, magentaHue, maxRedHue),
+            newHue = violetHue + maxRedHue - _newValueInMappedRange(frequency!, splitFreq, userMaxFreq, magentaHue, maxRedHue),
           } else {
-            newHue = violetHue - _newValueInMappedRange(frequency!, minFreq, splitFreq - .1, minRedHue, violetHue),
+            newHue = violetHue - _newValueInMappedRange(frequency!, userMinFreq, splitFreq - .1, minRedHue, violetHue),
           },
-          // newHue = violetHue - _newValueInMappedRange(frequency!, minFreq, maxFreq, minRedHue, violetHue),
 
               if (_multiColorActive) {
                 hsvColor = hsvColor.withHue(newHue)
-              } else {
-                hsvColor = HSVColor.fromColor(currentColor)
               }
-
-          // print(newHue),
         },
         onError: (err) {
           print("Error: $err");
@@ -193,8 +193,16 @@ class ApplicationState extends State<Application> {
     vibrationsSwitch = SwitchWidget(isActive: _vibrationsActive);
     multiColorSwitch = SwitchWidget(isActive: _multiColorActive);
     resizingSwitch = SwitchWidget(isActive: _resizingActive);
-    volumeSlider = RangeSliderWidget();
-    blockPicker = BlockPickerWidget(pickerColor: pickerColor, currentColor: currentColor);
+    blockPicker = BlockPickerWidget(pickerColor: _pickerColor, currentColor: _currentColor);
+
+    if (firstPass) {
+        volumeSlider = RangeSliderWidget(minMicDb, maxMicDb, minMicDb, maxMicDb, 0.0, 0.0, (maxMicDb - minMicDb - 1).floor() as int, firstPass);
+        frequencyDoubleSlider = RangeSliderWidget(220.0, 880.0, systemMinFreq, systemMaxFreq, 0.0, 0.0, (systemMaxFreq - systemMinFreq - 1).floor() as int, firstPass);
+        firstPass = !firstPass;
+    } else {
+      volumeSlider = RangeSliderWidget(minMicDb, maxMicDb, minMicDb, maxMicDb, rangeMinDb, rangeMaxDb, (maxMicDb - minMicDb - 1).floor() as int, firstPass);
+      frequencyDoubleSlider = RangeSliderWidget(220.0, 880.0, systemMinFreq, systemMaxFreq, userMinFreq, userMaxFreq, (systemMaxFreq - systemMinFreq - 1).floor() as int, firstPass);
+    }
 
     super.initState();
     _initialize();
@@ -218,7 +226,6 @@ class ApplicationState extends State<Application> {
   }
 
   void onError(Object error) {
-    print(error.toString());
     _isRecording = false;
   }
 
@@ -239,19 +246,12 @@ class ApplicationState extends State<Application> {
 
       Timer.periodic(const Duration(milliseconds: 5), (timer) {
         if (_resizingActive) {
-          _updateHeightAndWidthBasedOnVolume();
+          _updateBasedOnVolume();;
         } else {
           newWidth = widthMax;
           newHeight = heightMax;
         }
       });
-
-      if (_resizingActive) {
-        _updateHeightAndWidthBasedOnVolume();
-      } else {
-        newWidth = widthMax;
-        newHeight = heightMax;
-      }
     } catch (err) {
       print(err);
     }
@@ -270,15 +270,6 @@ class ApplicationState extends State<Application> {
       print('stop recorder error: $err');
     }
   }
-
-  // create some values
-  Color pickerColor = Color(0xff443a49);
-  Color currentColor = Color(0xff443a49);
-
-// ValueChanged<Color> callback
-//   void changeColor(Color color) {
-//     setState(() => pickerColor = color);
-//   }
 
   Widget buildToggle(SwitchWidget toggle, String subject) {
     return Row(
@@ -330,18 +321,16 @@ class ApplicationState extends State<Application> {
               Column(
                 children: [
                   const Text("Adjust your volume range"),
-                  Row(
-                    children: [
-                      const Text("45", style: TextStyle(fontSize: 18)),
-                      const Spacer(),
-                      volumeSlider,
-                      const Spacer(),
-                      const Text("90", style: TextStyle(fontSize: 18))
-                    ]
-                  )
+                  volumeSlider
                 ],
               ),
-              const Padding(
+              Column(
+                children: [
+                  const Text("Adjust your frequency/pitch range"),
+                  frequencyDoubleSlider,
+                ],
+              ),
+              Padding(
                   padding: EdgeInsets.only(top: 10.0, bottom: 10.0, right: 30.0),
                   child: Divider(
                       height: 2.0,
@@ -381,6 +370,7 @@ class ApplicationState extends State<Application> {
 
   @override
   Widget build(BuildContext context) {
+
     widthMax = MediaQuery
         .of(context)
         .size
@@ -393,10 +383,19 @@ class ApplicationState extends State<Application> {
     _vibrationsActive = vibrationsSwitch.isActive;
     _multiColorActive = multiColorSwitch.isActive;
     _resizingActive = resizingSwitch.isActive;
-    rangeMinDb = volumeSlider.min;
-    rangeMaxDb = volumeSlider.max;
-    currentColor = blockPicker.currentColor;
-    pickerColor = blockPicker.pickerColor;
+    _currentColor = blockPicker.currentColor;
+    _pickerColor = blockPicker.pickerColor;
+    rangeMinDb = volumeSlider.setMin;
+    rangeMaxDb = volumeSlider.setMax;
+    userMinFreq = frequencyDoubleSlider.absMin;
+    userMaxFreq = frequencyDoubleSlider.absMax;
+
+    if (!_multiColorActive) {
+      hsvColor = HSVColor.fromColor(_currentColor);
+      hsvColor.withSaturation(1.0);
+    } else {
+      hsvColor.withHue(newHue);
+    }
 
     return MaterialApp(
         title: "Simple flutter fft example",
@@ -471,17 +470,31 @@ class _BlockPickerWidgetState extends State<BlockPickerWidget> {
         onColorChanged: (color) {
           widget.currentColor = color;
           widget.pickerColor = color;
-          print(color);
-        }
     );
   }
 }
 
 class RangeSliderWidget extends StatefulWidget {
-  double min = 45.0;
-  double max = 95.0;
+  double initMin;
+  double initMax;
+  double absMin;
+  double absMax;
+  double setMin;
+  double setMax;
+  int divisions;
+  bool firstPass;
 
-  RangeSliderWidget({super.key});
+  RangeSliderWidget(
+      this.initMin,
+      this.initMax,
+      this.absMin,
+      this.absMax,
+      this.setMin,
+      this.setMax,
+      this.divisions,
+      this.firstPass,
+      {super.key}
+      );
 
   @override
   State<RangeSliderWidget> createState() => _RangeSliderWidgetState();
@@ -490,21 +503,27 @@ class RangeSliderWidget extends StatefulWidget {
 class _RangeSliderWidgetState extends State<RangeSliderWidget> {
   @override
   Widget build(BuildContext context) {
-    // RangeValues _currentRangeValues = const RangeValues(widget.min, widget.max);
+    RangeValues _currentRangeValues;
+    if (firstPass) {
+      _currentRangeValues = RangeValues(widget.absMin, widget.absMax);
+    } else {
+      _currentRangeValues = RangeValues(widget.setMin, widget.setMax);
+    }
 
     return RangeSlider(
-      values: RangeValues(widget.min, widget.max),
-      min: 45,
-      max: 95,
-      divisions: 10,
+      values: _currentRangeValues,
+      min: widget.absMin,
+      max: widget.absMax,
+      divisions: widget.divisions,
       labels: RangeLabels(
-        RangeValues(widget.min, widget.max).start.round().toString(),
-        RangeValues(widget.min, widget.max).end.round().toString(),
+        _currentRangeValues.start.round().toString(),
+        _currentRangeValues.end.round().toString(),
       ),
       onChanged: (RangeValues values) {
         setState(() {
-          widget.min = values.start;
-          widget.max = values.end;
+          _currentRangeValues = values;
+          widget.setMin = values.start;
+          widget.setMax = values.end;
         });
       },
     );
