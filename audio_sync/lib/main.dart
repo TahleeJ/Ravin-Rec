@@ -10,6 +10,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_fft/flutter_fft.dart';
 import 'package:flutter_fgbg/flutter_fgbg.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
 void main() => runApp(MyApp());
 
@@ -44,9 +45,22 @@ class ApplicationState extends State<Application> {
 
   // App foreground/background readings
   late StreamSubscription<FGBGType> subscription;
+  bool _appInFocus = true;
 
-  // Vibrations toggle value
+  // Toggles in settings
+  late SwitchWidget vibrationsSwitch;
+  late SwitchWidget multiColorSwitch;
+  late SwitchWidget resizingSwitch;
+
+  // Toggle values in settings
   bool _vibrationsActive = true;
+  bool _multiColorActive = true;
+  bool _resizingActive = true;
+
+  // Sliders in settings
+  late RangeSliderWidget volumeSlider;
+
+  late BlockPickerWidget blockPicker;
 
   // Min/max accepted decibel reading
   double rangeMinDb = minMicDb;
@@ -100,13 +114,10 @@ class ApplicationState extends State<Application> {
   final double maxRedHue = 360.0;
   double newHue = 0.0;
 
-  bool _appInFocus = true;
-  late SwitchWidget vibrationsSwitch;
-  late RangeSliderWidget volumeSlider;
-
   _updateHeightAndWidthBasedOnVolume() async {
     newHeight = _newValueInMappedRange(currDb, rangeMinDb, rangeMaxDb, heightMin, heightMax);
     newWidth = _newValueInMappedRange(currDb, rangeMinDb, rangeMaxDb, widthMin, widthMax);
+
     newValue = _newValueInMappedRange(currDb, rangeMinDb, rangeMaxDb, minValue, maxValue);
     hsvColor = hsvColor.withValue(newValue);
   }
@@ -155,7 +166,13 @@ class ApplicationState extends State<Application> {
             newHue = violetHue - _newValueInMappedRange(frequency!, minFreq, splitFreq - .1, minRedHue, violetHue),
           },
           // newHue = violetHue - _newValueInMappedRange(frequency!, minFreq, maxFreq, minRedHue, violetHue),
-          hsvColor = hsvColor.withHue(newHue),
+
+              if (_multiColorActive) {
+                hsvColor = hsvColor.withHue(newHue)
+              } else {
+                hsvColor = HSVColor.fromColor(currentColor)
+              }
+
           // print(newHue),
         },
         onError: (err) {
@@ -173,8 +190,12 @@ class ApplicationState extends State<Application> {
       _appInFocus = event == FGBGType.foreground;
     });
 
-    vibrationsSwitch = SwitchWidget();
+    vibrationsSwitch = SwitchWidget(isActive: _vibrationsActive);
+    multiColorSwitch = SwitchWidget(isActive: _multiColorActive);
+    resizingSwitch = SwitchWidget(isActive: _resizingActive);
     volumeSlider = RangeSliderWidget();
+    blockPicker = BlockPickerWidget(pickerColor: pickerColor, currentColor: currentColor);
+
     super.initState();
     _initialize();
   }
@@ -205,16 +226,32 @@ class ApplicationState extends State<Application> {
     try {
       _noiseSubscription = _noiseMeter.noiseStream.listen(onData);
 
-      Timer.periodic(const Duration(seconds: 1), (timer) async {
+      Timer.periodic(const Duration(seconds: 1), (timer) {
           acceptedDb = currDb - rangeMinDb;
           acceptedDbScale = acceptedDb / (rangeMaxDb - rangeMinDb);
-          _updateHeightAndWidthBasedOnVolume();
+
           destVibe = (maxVibe * acceptedDbScale).floor();
 
           if (_appInFocus && _vibrationsActive) {
             Vibration.vibrate(pattern: [0, 200, 0, 200, 0, 200], intensities: [0, (destVibe / 4).floor(), 0, (destVibe / 2).floor(), 0, destVibe]);
           }
       });
+
+      Timer.periodic(const Duration(milliseconds: 5), (timer) {
+        if (_resizingActive) {
+          _updateHeightAndWidthBasedOnVolume();
+        } else {
+          newWidth = widthMax;
+          newHeight = heightMax;
+        }
+      });
+
+      if (_resizingActive) {
+        _updateHeightAndWidthBasedOnVolume();
+      } else {
+        newWidth = widthMax;
+        newHeight = heightMax;
+      }
     } catch (err) {
       print(err);
     }
@@ -234,6 +271,25 @@ class ApplicationState extends State<Application> {
     }
   }
 
+  // create some values
+  Color pickerColor = Color(0xff443a49);
+  Color currentColor = Color(0xff443a49);
+
+// ValueChanged<Color> callback
+//   void changeColor(Color color) {
+//     setState(() => pickerColor = color);
+//   }
+
+  Widget buildToggle(SwitchWidget toggle, String subject) {
+    return Row(
+      children: [
+        Text("Toggle $subject"),
+        const Spacer(),
+        toggle
+      ],
+    );
+  }
+
   void buildSettings(BuildContext context) {
     Widget closeButton = TextButton(
       child: const Text("Close", style: TextStyle(fontSize: 16)),
@@ -243,29 +299,64 @@ class ApplicationState extends State<Application> {
     );
 
     AlertDialog settingsAlert = AlertDialog(
-      title: const Text("Settings"),
+      title: const Text("Settings", style: TextStyle(fontSize: 24)),
       content: SizedBox(
-        height: MediaQuery.of(context).size.height * (1/3),
-        width: MediaQuery.of(context).size.width * (2/3),
+        height: MediaQuery.of(context).size.height * (1/2),
+        width: MediaQuery.of(context).size.width,
         child: Center(
-          child: Column(
+          child: Scrollbar(
+            thumbVisibility: true,
+           thickness: 7.5,
+           radius: Radius.circular(5.0),
+           interactive: true,
+
+           child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.only(right: 15.0),
+                  child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Row(
-                children: [
-                  const Text("Toggle Vibrations"),
-                  const Spacer(),
-                  vibrationsSwitch
-                ],
+              buildToggle(vibrationsSwitch, "vibrations"),
+              buildToggle(multiColorSwitch, "multi-color"),
+              buildToggle(resizingSwitch, "resizing"),
+              const Padding(
+                padding: EdgeInsets.only(top: 10.0, bottom: 10.0, right: 30.0),
+                child: Divider(
+                    height: 2.0,
+                    thickness: 3.5,
+                    indent: 25.0
+                )
               ),
               Column(
                 children: [
                   const Text("Adjust your volume range"),
-                  volumeSlider
+                  Row(
+                    children: [
+                      const Text("45", style: TextStyle(fontSize: 18)),
+                      const Spacer(),
+                      volumeSlider,
+                      const Spacer(),
+                      const Text("90", style: TextStyle(fontSize: 18))
+                    ]
+                  )
                 ],
-              )
+              ),
+              const Padding(
+                  padding: EdgeInsets.only(top: 10.0, bottom: 10.0, right: 30.0),
+                  child: Divider(
+                      height: 2.0,
+                      thickness: 3.5,
+                      indent: 25.0
+                  )
+              ),
+              // SingleChildScrollView(
+                blockPicker,
             ],
-          )
-        )
+          ),
+        ),
+           ),
+        ),
+        ),
       ),
       actions: [
         closeButton
@@ -280,9 +371,13 @@ class ApplicationState extends State<Application> {
     );
   }
 
+  // HSVColor currentHSV = HSVColor.fromAHSV(1.0, 275, 1.0, 1.0);
+
   Future<void> closePopup(BuildContext context) async {
     Navigator.of(context).pop();
   }
+
+  // Color pickedColor = currentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -296,8 +391,12 @@ class ApplicationState extends State<Application> {
         .height;
 
     _vibrationsActive = vibrationsSwitch.isActive;
+    _multiColorActive = multiColorSwitch.isActive;
+    _resizingActive = resizingSwitch.isActive;
     rangeMinDb = volumeSlider.min;
     rangeMaxDb = volumeSlider.max;
+    currentColor = blockPicker.currentColor;
+    pickerColor = blockPicker.pickerColor;
 
     return MaterialApp(
         title: "Simple flutter fft example",
@@ -329,9 +428,9 @@ class ApplicationState extends State<Application> {
 }
 
 class SwitchWidget extends StatefulWidget {
-  bool isActive = true;
+  bool isActive;
 
-  SwitchWidget({super.key});
+  SwitchWidget({super.key, required this.isActive });
 
   @override
   State<SwitchWidget> createState() => _SwitchWidgetState();
@@ -354,9 +453,31 @@ class _SwitchWidgetState extends State<SwitchWidget> {
   }
 }
 
+class BlockPickerWidget extends StatefulWidget {
+  Color pickerColor;
+  Color currentColor;
+
+  BlockPickerWidget({super.key, required this.pickerColor, required this.currentColor });
+
+  @override
+  State<BlockPickerWidget> createState() => _BlockPickerWidgetState();
+}
+
+class _BlockPickerWidgetState extends State<BlockPickerWidget> {
+  @override
+  Widget build(BuildContext context) {
+    return BlockPicker(
+        pickerColor: widget.pickerColor,
+        onColorChanged: (color) {
+          widget.currentColor = color;
+          widget.pickerColor = color;
+          print(color);
+        }
+    );
+  }
+}
+
 class RangeSliderWidget extends StatefulWidget {
-  // int rangeMin = 45;
-  // final int rangeMax = 90;
   double min = 45.0;
   double max = 95.0;
 
