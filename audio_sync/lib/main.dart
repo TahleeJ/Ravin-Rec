@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_fft/flutter_fft.dart';
 import 'package:flutter_fgbg/flutter_fgbg.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:wakelock/wakelock.dart';
 
 final double minMicDb = 45.0;
 final double maxMicDb = 95.0;
@@ -186,8 +187,18 @@ class ApplicationState extends State<Application> {
     _noiseMeter = new NoiseMeter(onError);
     isRecording = flutterFft.getIsRecording;
     frequency = flutterFft.getFrequency;
+
+    WidgetsFlutterBinding.ensureInitialized();
+    Wakelock.enable();
+
     subscription = FGBGEvents.stream.listen((event) {
       _appInFocus = event == FGBGType.foreground;
+
+      if (_appInFocus) {
+        Wakelock.enable();
+      } else {
+        Wakelock.disable();
+      }
     });
 
     vibrationsSwitch = SwitchWidget(isActive: _vibrationsActive);
@@ -470,6 +481,7 @@ class _BlockPickerWidgetState extends State<BlockPickerWidget> {
         onColorChanged: (color) {
           widget.currentColor = color;
           widget.pickerColor = color;
+        }
     );
   }
 }
