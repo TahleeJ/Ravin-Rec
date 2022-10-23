@@ -114,9 +114,9 @@ class ApplicationState extends State<Application> {
   HSVColor hsvColor = HSVColor.fromAHSV(1.0, 217.0, 1.0, 1.0);
 
   // Shape's HSV hue
-  final double violetHue = 255.0;
+  final double violetHue = 270.0;
   final double minRedHue = 0.0;
-  final double magentaHue = 255.1;
+  final double magentaHue = 310.0;
   final double maxRedHue = 360.0;
   double newHue = 0.0;
 
@@ -167,7 +167,7 @@ class ApplicationState extends State<Application> {
           freqScale = violetHue / maxRedHue,
           splitFreq = ((userMaxFreq * freqScale) - userMinFreq + 1) + userMinFreq,
           if (frequency! >= splitFreq) {
-            newHue = violetHue + maxRedHue - _newValueInMappedRange(frequency!, splitFreq, userMaxFreq, magentaHue, maxRedHue),
+            newHue = violetHue + (magentaHue - violetHue) + maxRedHue - _newValueInMappedRange(frequency!, splitFreq, userMaxFreq, magentaHue, maxRedHue),
           } else {
             newHue = violetHue - _newValueInMappedRange(frequency!, userMinFreq, splitFreq - .1, minRedHue, violetHue),
           },
@@ -398,8 +398,8 @@ class ApplicationState extends State<Application> {
     _pickerColor = blockPicker.pickerColor;
     rangeMinDb = volumeSlider.setMin;
     rangeMaxDb = volumeSlider.setMax;
-    userMinFreq = frequencyDoubleSlider.absMin;
-    userMaxFreq = frequencyDoubleSlider.absMax;
+    userMinFreq = frequencyDoubleSlider.setMin;
+    userMaxFreq = frequencyDoubleSlider.setMax;
 
     if (!_multiColorActive) {
       hsvColor = HSVColor.fromColor(_currentColor);
